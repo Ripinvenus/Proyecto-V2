@@ -58,6 +58,10 @@ Controls (all also available via on-screen buttons):
 | Toggle Charts | Show/hide the bar-chart panel |
 | ESC | Quit |
 
+The window adapts to the desktop size. The city occupies the left side,
+controls and parameters sit in a middle column, and the real-time statistics
+with their charts have a dedicated panel on the far right, always visible.
+
 ## Cellular automaton theory
 
 The simulated city is a two-dimensional grid. Each cell is one section of
