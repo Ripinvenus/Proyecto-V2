@@ -50,7 +50,7 @@ Controls (all also available via on-screen buttons):
 | Reset | Reload the city and clear statistics |
 | Generate Vehicle | Spawn one vehicle at a valid entry point |
 | Clear Vehicles | Remove every vehicle from the grid |
-| Sim. speed slider | Run multiple generations per frame |
+| Sim. speed slider | Simulation speed from 0.1x (slow motion) to 10x (multiple generations per frame) |
 | Gen. rate | Probability of spawning a vehicle each generation |
 | Max vehicles | Upper bound of simultaneous vehicles |
 | Red / Green duration | Traffic light cycle timers (generations) |

@@ -187,6 +187,9 @@ class UserInterface:
         self.buttons = []
         self.sliders = []
         self.scenario_buttons = []
+        # Fractional generations per frame are accumulated so speeds below 1x
+        # advance the simulation every N frames instead of rounding up to 1.
+        self._step_accumulator = 0.0
 
         self._build_controls()
         self.show_charts = True
@@ -237,9 +240,9 @@ class UserInterface:
                                    lambda v: f"{int(v)}"))
         self.scenario_by += 56
         self.sliders.append(Slider((bx, self.scenario_by, bw, 20),
-                                   self.sim.speed, 1.0, 10.0,
+                                   self.sim.speed, 0.1, 10.0,
                                    self.small_font, "Sim. speed",
-                                   lambda v: f"{v:.1f}x"))
+                                   lambda v: f"{v:.2f}x" if v < 1 else f"{v:.1f}x"))
         self.scenario_by += 56
         self.sliders.append(Slider((bx, self.scenario_by, bw, 20),
                                    self.sim.initial_density, 0.0, 1.0,
@@ -443,10 +446,14 @@ class UserInterface:
             self.draw_grid()
             cx, cw, chart_top, chart_bottom = self.draw_panel()
 
-            steps = max(1, int(round(self.sim.speed)))
             if self.sim.running and not self.sim.paused:
-                for _ in range(steps):
+                self._step_accumulator += self.sim.speed
+                # Small tolerance avoids float drift (e.g. ten 0.1 steps).
+                while self._step_accumulator + 1e-9 >= 1.0:
                     self.sim.step()
+                    self._step_accumulator -= 1.0
+            else:
+                self._step_accumulator = 0.0
 
             if self.show_charts:
                 self.draw_charts(cx, cw, chart_top, chart_bottom)
