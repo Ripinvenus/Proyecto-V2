@@ -1,29 +1,19 @@
 """Simulation coordinator.
 
-Holds the cellular automaton, statistics, vehicle generation and the
-predefined scenarios. Advances the simulation one generation at a time.
+Holds the cellular automaton, statistics and vehicle generation. Advances the
+simulation one generation at a time. All parameters are configurable directly
+through the interface sliders.
 """
 from __future__ import annotations
 
 import random
-from typing import Callable
 
-from cellular_automaton import CellularAutomaton, VEHICLE
 from city_generator import generate_city, entry_points
 from statistics import TrafficStatistics
 
 
 class Simulation:
     """Top-level simulation logic."""
-
-    SCENARIOS = {
-        "A": {"name": "Low traffic",
-              "gen_rate": 0.10, "max_vehicles": 25, "density": 0.15},
-        "B": {"name": "Medium traffic",
-              "gen_rate": 0.30, "max_vehicles": 60, "density": 0.35},
-        "C": {"name": "High traffic",
-              "gen_rate": 0.60, "max_vehicles": 120, "density": 0.60},
-    }
 
     def __init__(self, rows: int = 41, cols: int = 51):
         self.rows = rows
@@ -38,9 +28,9 @@ class Simulation:
         self.moved_last_gen = 0
 
         # Configurable parameters.
-        self.gen_rate = self.SCENARIOS["B"]["gen_rate"]
-        self.max_vehicles = self.SCENARIOS["B"]["max_vehicles"]
-        self.initial_density = self.SCENARIOS["B"]["density"]
+        self.gen_rate = 0.30
+        self.max_vehicles = 60
+        self.initial_density = 0.35
         self.red_duration = 60
         self.green_duration = 60
 
@@ -48,20 +38,9 @@ class Simulation:
         self._rng.seed(42)
         self._spawn_accumulator = 0.0
 
-        self._apply_scenario("B")
         self.reset(initial=True)
 
     # ------------------------------------------------------------------ config
-    def _apply_scenario(self, key: str):
-        s = self.SCENARIOS[key]
-        self.gen_rate = s["gen_rate"]
-        self.max_vehicles = s["max_vehicles"]
-        self.initial_density = s["density"]
-
-    def set_scenario(self, key: str):
-        if key in self.SCENARIOS:
-            self._apply_scenario(key)
-
     def set_light_durations(self, red: int, green: int):
         self.red_duration = max(1, red)
         self.green_duration = max(1, green)

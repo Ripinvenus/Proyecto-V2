@@ -10,7 +10,7 @@ circulation — using a faithful two-dimensional cellular automaton.
 ```
 traffic_simulation/
     main.py             # Entry point
-    simulation.py       # Simulation coordinator (scenarios, spawning, step)
+    simulation.py       # Simulation coordinator (spawning, step, parameters)
     cellular_automaton.py  # CA grid, vehicles, simultaneous transition rules
     vehicle.py          # Vehicle model (position, direction, waiting time)
     traffic_light.py    # Traffic light model (independent red/green timers)
@@ -55,7 +55,6 @@ Controls (all also available via on-screen buttons):
 | Max vehicles | Upper bound of simultaneous vehicles |
 | Red / Green duration | Traffic light cycle timers (generations) |
 | Initial density | Fill fraction of road cells at reset |
-| Scenario A / B / C | Low / medium / high traffic presets |
 | Toggle Charts | Show/hide the bar-chart panel |
 | ESC | Quit |
 
@@ -152,16 +151,11 @@ Four bar charts are rendered live from recorded simulation data:
 
 All charts are bar charts, as required.
 
-## Experimental scenarios
+## Default parameters
 
-| Scenario | Generation rate | Max vehicles | Initial density |
-|----------|----------------|--------------|-----------------|
-| A — Low traffic | 0.10 | 25 | 0.15 |
-| B — Medium traffic | 0.30 | 60 | 0.35 |
-| C — High traffic | 0.60 | 120 | 0.60 |
-
-Switch scenarios to compare congestion levels. Traffic light durations can
-also be experimented with independently.
+The simulation starts with a generation rate of 0.30, at most 60 vehicles,
+an initial density of 0.35 and 60-generation red/green light durations. All of
+these values can be changed freely with the sliders while the app is running.
 
 ## Architecture
 
@@ -170,7 +164,7 @@ also be experimented with independently.
 - `TrafficLight` — state and independent red/green timers.
 - `CityGenerator` — builds roads, intersections, lights and obstacles.
 - `TrafficStatistics` — records metrics and history.
-- `Simulation` — coordinates spawning, stepping, scenarios and parameters.
+- `Simulation` — coordinates spawning, stepping and parameters.
 - `UserInterface` — Pygame rendering, controls, statistics and charts.
 
 ## Validation

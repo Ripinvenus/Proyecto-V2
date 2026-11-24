@@ -186,7 +186,6 @@ class UserInterface:
 
         self.buttons = []
         self.sliders = []
-        self.scenario_buttons = []
         # Fractional generations per frame are accumulated so speeds below 1x
         # advance the simulation every N frames instead of rounding up to 1.
         self._step_accumulator = 0.0
@@ -211,48 +210,39 @@ class UserInterface:
         self.btn_clear = add("Clear Vehicles", self._clear_vehicles)
         self.btn_charts = add("Toggle Charts", self._toggle_charts)
         by += (bh + gap) * 6 + 14
-        self.scenario_by = by + 4
-        for i, key in enumerate(("A", "B", "C")):
-            b = Button((bx + i * 52, self.scenario_by, 46, 26), key, self.font,
-                       lambda k=key: self._set_scenario(k))
-            self.scenario_buttons.append(b)
-        self.scenario_by += 36
+        param_y = by + 4
 
         # Sliders / configurable parameters.
-        self.sliders.append(Slider((bx, self.scenario_by, bw, 20),
+        self.sliders.append(Slider((bx, param_y, bw, 20),
                                    self.sim.gen_rate, 0.0, 1.0,
                                    self.small_font, "Generation rate",
                                    lambda v: f"{v:.2f}"))
-        self.scenario_by += 56
-        self.sliders.append(Slider((bx, self.scenario_by, bw, 20),
+        param_y += 56
+        self.sliders.append(Slider((bx, param_y, bw, 20),
                                    float(self.sim.max_vehicles), 1, 300,
                                    self.small_font, "Max vehicles",
                                    lambda v: f"{int(v)}"))
-        self.scenario_by += 56
-        self.sliders.append(Slider((bx, self.scenario_by, bw, 20),
+        param_y += 56
+        self.sliders.append(Slider((bx, param_y, bw, 20),
                                    float(self.sim.red_duration), 10, 300,
                                    self.small_font, "Red duration",
                                    lambda v: f"{int(v)}"))
-        self.scenario_by += 56
-        self.sliders.append(Slider((bx, self.scenario_by, bw, 20),
+        param_y += 56
+        self.sliders.append(Slider((bx, param_y, bw, 20),
                                    float(self.sim.green_duration), 10, 300,
                                    self.small_font, "Green duration",
                                    lambda v: f"{int(v)}"))
-        self.scenario_by += 56
-        self.sliders.append(Slider((bx, self.scenario_by, bw, 20),
+        param_y += 56
+        self.sliders.append(Slider((bx, param_y, bw, 20),
                                    self.sim.speed, 0.1, 10.0,
                                    self.small_font, "Sim. speed",
                                    lambda v: f"{v:.2f}x" if v < 1 else f"{v:.1f}x"))
-        self.scenario_by += 56
-        self.sliders.append(Slider((bx, self.scenario_by, bw, 20),
+        param_y += 56
+        self.sliders.append(Slider((bx, param_y, bw, 20),
                                    self.sim.initial_density, 0.0, 1.0,
                                    self.small_font, "Initial density",
                                    lambda v: f"{v:.2f}"))
-        self.params_bottom = self.scenario_by + 30
-
-    def _set_scenario(self, key):
-        self.sim.set_scenario(key)
-        self.sim.reset()
+        self.params_bottom = param_y + 30
 
     def _spawn_one(self):
         if self.sim.entries:
@@ -325,14 +315,6 @@ class UserInterface:
             ty += b.rect.height + 8
 
         ty += 10
-        draw_text(self.screen, "Scenario (A=Low, B=Medium, C=High)", px + 12, ty, self.small_font)
-        ty += 20
-        for i, b in enumerate(self.scenario_buttons):
-            b.rect.x = px + 12 + i * 52
-            b.rect.y = ty
-            b.draw(self.screen)
-        ty += 36
-
         draw_text(self.screen, "Parameters", px + 12, ty, self.title_font)
         ty += 26
         for s in self.sliders:
@@ -426,8 +408,6 @@ class UserInterface:
                     self.sim.toggle_pause()
             for b in self.buttons:
                 b.handle(event)
-            for b in self.scenario_buttons:
-                b.handle(event)
             for s in self.sliders:
                 s.handle(event)
 
@@ -438,8 +418,6 @@ class UserInterface:
 
             mx, my = pygame.mouse.get_pos()
             for b in self.buttons:
-                b.update_hover((mx, my))
-            for b in self.scenario_buttons:
                 b.update_hover((mx, my))
 
             self.screen.fill(BG)
