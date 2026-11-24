@@ -6,6 +6,8 @@ Grid states:
   2 = red traffic light (red)
   3 = green traffic light (green)
   4 = obstacle / building (dark gray)
+  5 = delivery stop (yellow)
+  6 = courier / delivery agent (orange)
 
 Neighbourhood: Von Neumann (up, down, left, right). Diagonal movement is not
 allowed. Updates are simultaneous using the current generation as the sole
@@ -18,6 +20,7 @@ import numpy as np
 
 from vehicle import Vehicle
 from traffic_light import TrafficLight
+from courier import Courier
 
 # Cell states
 EMPTY = 0
@@ -25,6 +28,8 @@ VEHICLE = 1
 RED_LIGHT = 2
 GREEN_LIGHT = 3
 OBSTACLE = 4
+STOP = 5
+COURIER = 6
 
 # Movement deltas (delta_row, delta_col)
 DIR_NORTH = (-1, 0)
@@ -60,6 +65,10 @@ class CellularAutomaton:
         self.vehicles: dict[int, Vehicle] = {}
         self.traffic_lights: dict[tuple[int, int], TrafficLight] = {}
 
+        # Delivery route: yellow stop cells (infrastructure) and one courier.
+        self.stops: list[tuple[int, int]] = []
+        self.courier: Courier | None = None
+
     # ------------------------------------------------------------------ setup
     def is_within(self, r: int, c: int) -> bool:
         return 0 <= r < self.rows and 0 <= c < self.cols
@@ -90,11 +99,81 @@ class CellularAutomaton:
         for light in self.traffic_lights.values():
             light.set_durations(red_duration, green_duration)
 
+    # --------------------------------------------------------------- courier
+    def toggle_stop(self, r: int, c: int) -> bool:
+        """Add/remove a yellow stop on a free street cell. Replans on change."""
+        if not self.is_within(r, c) or not self.has_road[r, c]:
+            return False
+        if (r, c) in self.traffic_lights:
+            return False
+        pos = (r, c)
+        if pos in self.stops:
+            self.stops.remove(pos)
+            if self.base[r, c] == STOP:
+                self.base[r, c] = EMPTY
+            if self.grid[r, c] == STOP:
+                self.grid[r, c] = EMPTY
+        else:
+            if self.grid[r, c] not in (EMPTY, STOP):
+                return False
+            self.stops.append(pos)
+            self.base[r, c] = STOP
+            if self.grid[r, c] != COURIER:
+                self.grid[r, c] = STOP
+        self.replan_courier()
+        return True
+
+    def place_courier(self, r: int, c: int):
+        """Place (or move) the single courier and plan its route."""
+        if not self.is_within(r, c) or not self.has_road[r, c]:
+            return None
+        if (r, c) in self.traffic_lights or self.grid[r, c] == VEHICLE:
+            return None
+        if self.courier is not None:
+            old_r, old_c = self.courier.pos
+            self.grid[old_r, old_c] = self.base[old_r, old_c]
+        self.courier = Courier(r, c)
+        self.grid[r, c] = COURIER
+        self.replan_courier()
+        return self.courier
+
+    def clear_route(self):
+        """Remove the courier and every stop."""
+        if self.courier is not None:
+            r, c = self.courier.pos
+            self.grid[r, c] = self.base[r, c]
+            self.courier = None
+        for r, c in self.stops:
+            if self.base[r, c] == STOP:
+                self.base[r, c] = EMPTY
+            if self.grid[r, c] == STOP:
+                self.grid[r, c] = EMPTY
+        self.stops.clear()
+
+    def replan_courier(self):
+        if self.courier is not None:
+            self.courier.plan(self, self.generation)
+
+    def _legal_courier_step(self, r: int, c: int, tr: int, tc: int) -> bool:
+        """Check a planned step against the one-way street directions."""
+        if not self.is_within(tr, tc) or not self.has_road[tr, tc]:
+            return False
+        if abs(tr - r) + abs(tc - c) != 1:
+            return False
+        allowed = []
+        if r in self.street_rows:
+            dr, dc = self.street_rows[r]
+            allowed.append((r + dr, c + dc))
+        if c in self.street_cols:
+            dr, dc = self.street_cols[c]
+            allowed.append((r + dr, c + dc))
+        return (tr, tc) in allowed
+
     # -------------------------------------------------------- vehicle spawning
     def spawn_vehicle(self, r: int, c: int, direction):
         if not self.is_within(r, c):
             return None
-        if self.grid[r, c] != EMPTY:
+        if self.grid[r, c] not in (EMPTY, STOP):
             return None
         vid = self.next_vid
         self.next_vid += 1
@@ -122,9 +201,6 @@ class CellularAutomaton:
             light.update()
             self.base[light.row, light.col] = light.cell_state
 
-        # Snapshot of current occupancy.
-        occupied = {(v.row, v.col) for v in self.vehicles.values()}
-
         # Rebuild next grid from infrastructure base.
         new_grid = self.base.copy()
 
@@ -147,19 +223,37 @@ class CellularAutomaton:
                 continue
 
             target_state = self.grid[tr, tc]
-            can_enter = False
-            if target_state == EMPTY:
-                can_enter = True
-            elif target_state == GREEN_LIGHT:
-                can_enter = True
-            # RED_LIGHT or VEHICLE -> cannot enter (vehicle stops).
+            # STOP cells are normal streets for vehicles; red lights, vehicles
+            # and the courier block entry.
+            can_enter = target_state in (EMPTY, GREEN_LIGHT, STOP)
 
             if can_enter and (tr, tc) not in targets_taken:
                 moves[vid] = (tr, tc)
                 targets_taken.add((tr, tc))
             # Otherwise the vehicle stays in place.
 
-        # 3. Apply moves simultaneously.
+        # 2b. The courier decides from the same snapshot, after vehicles have
+        # claimed their targets, so it never steals or shares a cell.
+        courier = self.courier
+        courier_target = None
+        if courier is not None and courier.status == "moving":
+            target = courier.next_step
+            if target is None:
+                courier.status = "done"
+            else:
+                tr, tc = target
+                if self._legal_courier_step(courier.row, courier.col, tr, tc):
+                    courier.direction = (tr - courier.row, tc - courier.col)
+                    target_state = self.grid[tr, tc]
+                    if (target_state in (EMPTY, GREEN_LIGHT, STOP)
+                            and (tr, tc) not in targets_taken):
+                        courier_target = (tr, tc)
+                        targets_taken.add((tr, tc))
+                else:
+                    # Street layout changed underneath the plan.
+                    self.replan_courier()
+
+        # 3. Apply vehicle moves simultaneously.
         exited_vehicles: list[Vehicle] = []
         for vid, target in moves.items():
             v = self.vehicles[vid]
@@ -171,6 +265,21 @@ class CellularAutomaton:
             new_grid[v.row, v.col] = self.base[v.row, v.col]
             v.row, v.col = tr, tc
             new_grid[tr, tc] = VEHICLE
+
+        # 3b. Apply the courier move (or leave it waiting at a red light).
+        if courier_target is not None and courier is not None:
+            cr, cc = courier.pos
+            new_grid[cr, cc] = self.base[cr, cc]
+            courier.row, courier.col = courier_target
+            courier.path_index += 1
+            if courier.pos in self.stops:
+                courier.delivered.add(courier.pos)
+            new_grid[courier.row, courier.col] = COURIER
+            if courier.path_index >= len(courier.path):
+                courier.status = "done"
+        elif courier is not None:
+            new_grid[courier.row, courier.col] = COURIER
+            courier.waited += 1
 
         # 4. Vehicles that did not move remain in their cell.
         exited_ids = {v.vid for v in exited_vehicles}

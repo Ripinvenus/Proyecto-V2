@@ -11,7 +11,7 @@ import random
 import pygame
 
 from cellular_automaton import (
-    EMPTY, VEHICLE, RED_LIGHT, GREEN_LIGHT, OBSTACLE,
+    EMPTY, VEHICLE, RED_LIGHT, GREEN_LIGHT, OBSTACLE, STOP, COURIER,
     DIR_NORTH, DIR_SOUTH, DIR_WEST, DIR_EAST,
 )
 
@@ -28,6 +28,8 @@ COLORS = {
     RED_LIGHT: (225, 60, 60),    # red traffic light
     GREEN_LIGHT: (60, 200, 90),  # green traffic light
     OBSTACLE: (70, 72, 78),      # dark gray building
+    STOP: (255, 205, 40),        # yellow delivery stop
+    COURIER: (255, 140, 30),     # orange delivery agent
 }
 INTERSECTION = (180, 185, 192)
 GRID_LINE = (170, 175, 180)
@@ -219,8 +221,9 @@ class UserInterface:
         self.btn_reset = add("Reset", self.sim.reset)
         self.btn_gen = add("Generate Vehicle", self._spawn_one)
         self.btn_clear = add("Clear Vehicles", self._clear_vehicles)
+        self.btn_clear_route = add("Clear Route", self._clear_route)
         self.btn_charts = add("Toggle Charts", self._toggle_charts)
-        by += (bh + gap) * 6 + 14
+        by += (bh + gap) * 7 + 14
         param_y = by + 4
 
         # Sliders / configurable parameters.
@@ -264,6 +267,19 @@ class UserInterface:
         self.sim.ca.vehicles.clear()
         self.sim.ca.grid[self.sim.ca.grid == VEHICLE] = EMPTY
 
+    def _clear_route(self):
+        self.sim.ca.clear_route()
+
+    def _cell_at(self, pos):
+        """Translate a screen position to a (row, col) cell, or None."""
+        ox, oy = self.grid_origin
+        cs = self.cell_size
+        ca = self.sim.ca
+        x, y = pos
+        if not (ox <= x < ox + ca.cols * cs and oy <= y < oy + ca.rows * cs):
+            return None
+        return (y - oy) // cs, (x - ox) // cs
+
     def _toggle_charts(self):
         self.show_charts = not self.show_charts
 
@@ -291,6 +307,10 @@ class UserInterface:
                     color = COLORS[RED_LIGHT]
                 elif state == GREEN_LIGHT:
                     color = COLORS[GREEN_LIGHT]
+                elif state == STOP:
+                    color = COLORS[STOP]
+                elif state == COURIER:
+                    color = COLORS[COURIER]
                 elif state == EMPTY and ca.has_road[r, c]:
                     color = INTERSECTION if self._is_intersection(ca, r, c) else COLORS[EMPTY]
                 else:
@@ -304,6 +324,22 @@ class UserInterface:
             pygame.draw.circle(self.screen, (255, 255, 255), (x, y), max(2, cs // 3))
             pygame.draw.line(self.screen, (255, 255, 255), (x, y),
                              (x + dc * 3, y + dr * 3), 2)
+
+        # Courier and delivered-stop markers.
+        if ca.courier is not None:
+            for r, c in ca.courier.delivered:
+                if (r, c) in ca.stops:
+                    x = ox + c * cs + cs // 2
+                    y = oy + r * cs + cs // 2
+                    pygame.draw.circle(self.screen, (110, 70, 0), (x, y),
+                                       max(2, cs // 6))
+            cour = ca.courier
+            x = ox + cour.col * cs + cs // 2
+            y = oy + cour.row * cs + cs // 2
+            dr, dc = cour.direction
+            pygame.draw.circle(self.screen, (255, 255, 255), (x, y), max(3, cs // 2))
+            pygame.draw.line(self.screen, (255, 255, 255), (x, y),
+                             (x + dc * 4, y + dr * 4), 2)
 
         gw = ca.cols * cs
         gh = ca.rows * cs
@@ -367,6 +403,10 @@ class UserInterface:
             ("Traffic density", f"{stats['density']:.1f}%"),
             ("Avg travel time", f"{stats['avg_travel_time']:.1f} gen"),
             ("Avg speed", f"{stats['avg_speed']:.2f}"),
+            ("Courier", stats["courier_status"]),
+            ("Stops done", f"{stats['stops_done']}/{stats['stops_total']}"),
+            ("Pending / unreach.", f"{stats['stops_pending']} / {stats['stops_unreachable']}"),
+            ("Route / time", f"{stats['route_length']} / {stats['courier_time']} gen"),
         ]
         for label, value in lines:
             draw_text(self.screen, f"{label}:", stats_x + 12, ty, self.small_font, TEXT_MUTED)
@@ -437,6 +477,13 @@ class UserInterface:
                     self.running = False
                 elif event.key == pygame.K_SPACE:
                     self.sim.toggle_pause()
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button in (1, 3):
+                cell = self._cell_at(event.pos)
+                if cell is not None:
+                    if event.button == 1:
+                        self.sim.ca.toggle_stop(*cell)
+                    else:
+                        self.sim.ca.place_courier(*cell)
             for b in self.buttons:
                 b.handle(event)
             for s in self.sliders:

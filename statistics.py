@@ -27,6 +27,15 @@ class TrafficStatistics:
         self.total_generated = 0
         self.total_exited = 0
 
+        # Latest courier route snapshot.
+        self.courier_status = "-"
+        self.stops_done = 0
+        self.stops_total = 0
+        self.stops_pending = 0
+        self.stops_unreachable = 0
+        self.route_length = 0
+        self.courier_time = 0
+
     # ------------------------------------------------------------------ record
     def record(self, generation: int, ca, moved_last_gen: int,
                exited_travel_times: list[int]):
@@ -41,6 +50,26 @@ class TrafficStatistics:
         waits = [v.total_wait for v in ca.vehicle_list()]
         avg_wait = (sum(waits) / len(waits)) if waits else 0.0
 
+        # Courier / delivery route metrics.
+        courier = getattr(ca, "courier", None)
+        all_stops = getattr(ca, "stops", [])
+        if courier is not None:
+            courier_status = courier.status
+            stops_done = len(courier.delivered)
+            stops_total = len(all_stops)
+            stops_pending = max(0, stops_total - stops_done)
+            stops_unreachable = len(courier.unreachable)
+            route_length = courier.route_length
+            courier_time = max(0, generation - courier.born_generation)
+        else:
+            courier_status = "-"
+            stops_done = 0
+            stops_total = len(all_stops)
+            stops_pending = stops_total
+            stops_unreachable = 0
+            route_length = 0
+            courier_time = 0
+
         self.completed_travel_times.extend(exited_travel_times)
 
         self.generations.append(generation)
@@ -53,6 +82,14 @@ class TrafficStatistics:
 
         self.total_generated = ca.total_generated
         self.total_exited = exited
+
+        self.courier_status = courier_status
+        self.stops_done = stops_done
+        self.stops_total = stops_total
+        self.stops_pending = stops_pending
+        self.stops_unreachable = stops_unreachable
+        self.route_length = route_length
+        self.courier_time = courier_time
 
     # ---------------------------------------------------------------- queries
     def avg_travel_time(self) -> float:
@@ -72,6 +109,13 @@ class TrafficStatistics:
             "avg_travel_time": self.avg_travel_time(),
             "total_generated": self.total_generated,
             "total_exited": self.total_exited,
+            "courier_status": self.courier_status,
+            "stops_done": self.stops_done,
+            "stops_total": self.stops_total,
+            "stops_pending": self.stops_pending,
+            "stops_unreachable": self.stops_unreachable,
+            "route_length": self.route_length,
+            "courier_time": self.courier_time,
         }
 
     def history(self) -> dict:

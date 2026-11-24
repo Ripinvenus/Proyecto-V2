@@ -14,6 +14,7 @@ traffic_simulation/
     cellular_automaton.py  # CA grid, vehicles, simultaneous transition rules
     vehicle.py          # Vehicle model (position, direction, waiting time)
     traffic_light.py    # Traffic light model (independent red/green timers)
+    courier.py          # Delivery agent and BFS/greedy/2-opt route planner
     city_generator.py   # Road network, intersections, obstacles, lights
     statistics.py       # Real-time metrics and history
     interface.py        # Pygame rendering, controls, bar charts
@@ -56,6 +57,9 @@ Controls (all also available via on-screen buttons):
 | Red / Green duration | Traffic light cycle timers (generations) |
 | Initial density | Fill fraction of road cells at reset |
 | Toggle Charts | Show/hide the bar-chart panel |
+| Left click on the map | Toggle a yellow delivery stop (click again to remove it) |
+| Right click on the map | Place/reposition the orange courier and start its route |
+| Clear Route | Remove every stop and the courier |
 | ESC | Quit |
 
 The window adapts to the desktop size. The city occupies the left side,
@@ -65,7 +69,7 @@ with their charts have a dedicated panel on the far right, always visible.
 ## Cellular automaton theory
 
 The simulated city is a two-dimensional grid. Each cell is one section of
-street or an urban element and takes exactly one of five states:
+street or an urban element and takes exactly one of seven states:
 
 | State | Meaning | Colour |
 |-------|---------|--------|
@@ -74,6 +78,8 @@ street or an urban element and takes exactly one of five states:
 | 2 | Red traffic light | Red |
 | 3 | Green traffic light | Green |
 | 4 | Obstacle / building | Dark gray |
+| 5 | Delivery stop | Yellow |
+| 6 | Courier (delivery agent) | Orange |
 
 ### Von Neumann neighbourhood
 
@@ -99,6 +105,11 @@ valid street segment.
 9. No diagonal movement or direction changes off a valid street.
 10. All updates are simultaneous via a temporary grid, so no vehicle moves
    more than one cell per generation and no conflicts arise.
+11. Stop cells (state 5) are ordinary streets for traffic; the courier (state 6)
+   follows its precomputed path one cell per generation, obeying red lights and
+   yielding to vehicles. It never shares a cell with another agent.
+12. When the courier reaches a stop it is marked as delivered (dark dot) and
+    the route continues; after the last stop it stops until repositioned.
 
 Traffic lights are infrastructure, not vehicles: their state is independent
 of vehicle movement and persists across generations.
@@ -124,6 +135,25 @@ Vehicles are generated dynamically:
 - Configurable maximum number of simultaneous vehicles.
 - No spawning on occupied cells, traffic lights, or obstacles.
 
+## Delivery courier
+
+A single orange agent can be dropped anywhere on a street with **right click**.
+Yellow stops are painted/unpainted with **left click** (only on street cells,
+never on lights, obstacles or occupied cells). Dropping the courier — or editing
+a stop while it is running — recomputes its route from its current position:
+
+- A directed graph is built from the one-way street directions; at
+  intersections the courier may continue or turn into the crossing street.
+- Distances between all stops are computed with BFS.
+- The visiting order is chosen greedily (nearest stop first) and refined with
+  2-opt until no inversion shortens the tour.
+- The full path is stitched together from BFS legs and validated step by step
+  against the street directions. Stops that cannot be reached are reported as
+  unreachable and skipped.
+
+The courier respects red lights and vehicle occupancy just like any other
+agent, and it stops after delivering the last reachable stop.
+
 ## Traffic light behaviour
 
 Each traffic light is an independent object with:
@@ -143,6 +173,9 @@ Each traffic light is an independent object with:
 - Congested cells (vehicles stopped 3+ consecutive generations)
 - Traffic density percentage (active vehicles / road cells)
 - Total simulation generations
+- Courier status (idle / moving / done)
+- Delivered stops / total stops, pending and unreachable stops
+- Planned route length and generations since the courier started
 
 ## Data visualization (bar charts)
 
@@ -166,6 +199,7 @@ these values can be changed freely with the sliders while the app is running.
 - `CellularAutomaton` — owns the grid and applies one generation transition.
 - `Vehicle` — identity, position, direction, waiting/travel time.
 - `TrafficLight` — state and independent red/green timers.
+- `Courier` — delivery agent and BFS/greedy/2-opt route planner (`courier.py`).
 - `CityGenerator` — builds roads, intersections, lights and obstacles.
 - `TrafficStatistics` — records metrics and history.
 - `Simulation` — coordinates spawning, stepping and parameters.
@@ -177,4 +211,6 @@ these values can be changed freely with the sliders while the app is running.
 - Vehicles never share a cell; no diagonal moves.
 - Red lights block entry; vehicles clear an intersection once inside.
 - No spawning on occupied cells, lights or obstacles.
+- Courier steps are legal one-way moves; it never overlaps a vehicle or enters
+  a red light, and it delivers every reachable stop.
 - Continuous run tested without crashes.
