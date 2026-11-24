@@ -56,20 +56,35 @@ def generate_city(rows: int = 41, cols: int = 51,
     # Remember each street's intended direction. This is needed because the
     # vertical-street pass below overwrites ``road_dir`` at every crossing,
     # including the left/right border cells used by horizontal entry points.
-    ca.street_rows = {}
-    ca.street_cols = {}
+    row_dirs = {r: _alternate(i) for i, r in enumerate(street_rows)}
+    col_dirs = {c: (DIR_SOUTH if j % 2 == 0 else DIR_NORTH)
+                for j, c in enumerate(street_cols)}
+
+    # A second lane just inside every border, running in the opposite
+    # direction. Each pair of border lanes forms a one-way couplet, so the
+    # courier can turn around and reach cells that were unreachable before.
+    def _opposite(direction):
+        return tuple(-x for x in direction)
+
+    if 1 not in row_dirs and rows > 3:
+        row_dirs[1] = _opposite(row_dirs[0])              # top: West
+    if rows - 2 not in row_dirs and rows > 3:
+        row_dirs[rows - 2] = _opposite(row_dirs[rows - 1])  # bottom: West
+    if 1 not in col_dirs and cols > 3:
+        col_dirs[1] = _opposite(col_dirs[0])              # left: North
+    if cols - 2 not in col_dirs and cols > 3:
+        col_dirs[cols - 2] = _opposite(col_dirs[cols - 1])  # right: South
+
+    ca.street_rows = row_dirs
+    ca.street_cols = col_dirs
 
     # Horizontal streets.
-    for i, r in enumerate(street_rows):
-        direction = _alternate(i)
-        ca.street_rows[r] = direction
+    for r, direction in row_dirs.items():
         for c in range(cols):
             ca.set_road(r, c, direction)
 
     # Vertical streets.
-    for j, c in enumerate(street_cols):
-        direction = DIR_SOUTH if j % 2 == 0 else DIR_NORTH
-        ca.street_cols[c] = direction
+    for c, direction in col_dirs.items():
         for r in range(rows):
             # Vertical overrides direction at the cell but keeps it drivable.
             ca.has_road[r, c] = True
@@ -77,13 +92,19 @@ def generate_city(rows: int = 41, cols: int = 51,
             ca.grid[r, c] = EMPTY
             ca.road_dir[r, c] = direction
 
+    # The top-left corner would otherwise be a dead source (both border lanes
+    # lead away from it). The inner left lane reaches (0,1) going North, so a
+    # short West hook makes the corner reachable as well.
+    if rows > 1 and cols > 1 and ca.has_road[0, 1] and ca.has_road[0, 0]:
+        ca.extra_edges.add(((0, 1), (0, 0)))
+
     # A traffic light at EVERY internal intersection (border crossings are
     # entry/exit cells and must stay free so vehicles can spawn and leave).
     light_positions = []
-    for i, r in enumerate(street_rows):
+    for i, r in enumerate(sorted(row_dirs)):
         if r == 0 or r == rows - 1:
             continue
-        for j, c in enumerate(street_cols):
+        for j, c in enumerate(sorted(col_dirs)):
             if c == 0 or c == cols - 1:
                 continue
             start = "red" if (i + j) % 4 == 0 else "green"

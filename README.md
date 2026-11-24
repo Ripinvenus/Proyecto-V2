@@ -17,7 +17,7 @@ traffic_simulation/
     courier.py          # Delivery agent and BFS/greedy/2-opt route planner
     city_generator.py   # Road network, intersections, obstacles, lights
     statistics.py       # Real-time metrics and history
-    interface.py        # Pygame rendering, controls, bar charts
+    interface.py        # Pygame rendering, controls and statistics
     requirements.txt    # Python dependencies
     README.md           # This file
 ```
@@ -27,7 +27,7 @@ traffic_simulation/
 - Python 3.8+
 - pygame
 - numpy
-- matplotlib (listed for completeness; charts are drawn with Pygame)
+- matplotlib (listed for completeness; the interface is drawn with Pygame)
 
 Install dependencies:
 
@@ -56,15 +56,15 @@ Controls (all also available via on-screen buttons):
 | Max vehicles | Upper bound of simultaneous vehicles |
 | Red / Green duration | Traffic light cycle timers (generations) |
 | Initial density | Fill fraction of road cells at reset |
-| Toggle Charts | Show/hide the bar-chart panel |
 | Left click on the map | Toggle a yellow delivery stop (click again to remove it) |
 | Right click on the map | Place/reposition the orange courier and start its route |
 | Clear Route | Remove every stop and the courier |
 | ESC | Quit |
 
-The window adapts to the desktop size. The city occupies the left side,
-controls and parameters sit in a middle column, and the real-time statistics
-with their charts have a dedicated panel on the far right, always visible.
+The window adapts to the desktop size. The city occupies the left side and is
+drawn as large as possible; controls and parameters sit in a compact middle
+column, and the real-time statistics have a small dedicated panel on the far
+right. There are no charts, so the map gets the available space.
 
 ## Cellular automaton theory
 
@@ -119,11 +119,16 @@ of vehicle movement and persists across generations.
 `CityGenerator` builds a connected road network automatically:
 
 - Multiple horizontal and vertical one-way streets (directions alternate).
+- A second, opposite-direction lane just inside every border (rows 1 and 39,
+  columns 1 and 49), forming one-way couplets on all four sides. A short hook
+  from `(0,1)` to `(0,0)` makes the whole network strongly connected, so no
+  street cell is unreachable for the courier.
 - Intersections where streets cross.
-- A traffic light at every internal intersection.
+- A traffic light at every internal intersection (30 in the default layout).
 - Obstacles (buildings) filling the blocks between streets.
-- Entry/exit points on every grid edge so vehicles always have a valid route
-  from one side of the city to the other.
+- Entry/exit points on every grid edge, including the new reverse lanes
+  (15 in total), so vehicles always have a valid route from one side of the
+  city to the other.
 
 ## Vehicle generation
 
@@ -177,17 +182,6 @@ Each traffic light is an independent object with:
 - Delivered stops / total stops, pending and unreachable stops
 - Planned route length and generations since the courier started
 
-## Data visualization (bar charts)
-
-Four bar charts are rendered live from recorded simulation data:
-
-1. Active vehicles vs. vehicles that exited the city.
-2. Traffic congestion levels over recent simulation intervals.
-3. Vehicle generation vs. vehicle departure.
-4. Traffic density under the current traffic-light configuration.
-
-All charts are bar charts, as required.
-
 ## Default parameters
 
 The simulation starts with a generation rate of 0.30, at most 60 vehicles,
@@ -203,7 +197,7 @@ these values can be changed freely with the sliders while the app is running.
 - `CityGenerator` — builds roads, intersections, lights and obstacles.
 - `TrafficStatistics` — records metrics and history.
 - `Simulation` — coordinates spawning, stepping and parameters.
-- `UserInterface` — Pygame rendering, controls, statistics and charts.
+- `UserInterface` — Pygame rendering, controls and statistics.
 
 ## Validation
 

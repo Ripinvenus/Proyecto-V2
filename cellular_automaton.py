@@ -61,6 +61,8 @@ class CellularAutomaton:
         # Street layout (row/col -> one-way direction) used to derive entries.
         self.street_rows: dict[int, tuple[int, int]] = {}
         self.street_cols: dict[int, tuple[int, int]] = {}
+        # Short connector edges (e.g. corner hooks of the reverse border lanes).
+        self.extra_edges: set[tuple[tuple[int, int], tuple[int, int]]] = set()
 
         self.vehicles: dict[int, Vehicle] = {}
         self.traffic_lights: dict[tuple[int, int], TrafficLight] = {}
@@ -167,7 +169,7 @@ class CellularAutomaton:
         if c in self.street_cols:
             dr, dc = self.street_cols[c]
             allowed.append((r + dr, c + dc))
-        return (tr, tc) in allowed
+        return (tr, tc) in allowed or ((r, c), (tr, tc)) in self.extra_edges
 
     # -------------------------------------------------------- vehicle spawning
     def spawn_vehicle(self, r: int, c: int, direction):

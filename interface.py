@@ -1,8 +1,8 @@
 """Pygame graphical interface for the traffic simulation.
 
 Renders the city grid, vehicles, traffic lights and obstacles, a control
-panel with buttons and configurable parameters, a real-time statistics
-panel and four bar charts built from recorded simulation data.
+panel with buttons and configurable parameters and a compact real-time
+statistics panel.
 """
 from __future__ import annotations
 
@@ -138,36 +138,6 @@ class Slider:
         self.value = self.min_v + frac * (self.max_v - self.min_v)
 
 
-def draw_bar_chart(surface, rect, values, labels, title, color, font, title_font,
-                   vmax=None, show_values=False):
-    """Draw a vertical bar chart inside ``rect``. All charts are bar charts."""
-    pygame.draw.rect(surface, PANEL, rect, border_radius=6)
-    pygame.draw.rect(surface, PANEL_BORDER, rect, width=2, border_radius=6)
-    draw_text(surface, title, rect.x + 10, rect.y + 7, title_font, TEXT)
-
-    if not values:
-        draw_text(surface, "no data", rect.x + 10, rect.y + 32, font, TEXT_MUTED)
-        return
-
-    plot_top = rect.y + 34
-    plot_bottom = rect.bottom - 22
-    plot_height = plot_bottom - plot_top
-    n = len(values)
-    mx = vmax if vmax else (max(values) or 1)
-    step = (rect.width - 20) / n
-    bar_w = max(4, step - 7)
-
-    for i, val in enumerate(values):
-        h = int((val / mx) * plot_height) if mx else 0
-        bx = rect.x + 10 + i * step
-        by = plot_bottom - h
-        pygame.draw.rect(surface, color, (bx, by, bar_w, h), border_radius=2)
-        if show_values:
-            draw_text(surface, f"{val:.0f}", bx, by - 15, font, TEXT_MUTED)
-        if i < len(labels):
-            draw_text(surface, labels[i], bx, plot_bottom + 3, font, TEXT_MUTED)
-
-
 # ------------------------------------------------------------------ interface
 class UserInterface:
     def __init__(self, sim):
@@ -191,10 +161,14 @@ class UserInterface:
         pygame.display.set_caption("2D Cellular Automaton - Urban Traffic Flow")
         self.clock = pygame.time.Clock()
 
-        # Scale the city so the grid and the two right-hand panels fit together.
-        min_right_w = 800
+        # Without charts the side panels need much less room, so the city gets
+        # the largest cell size that fits both width and height.
+        min_right_w = 650
         max_grid_w = self.width - 40 - min_right_w
-        self.cell_size = max(7, min(14, max_grid_w // self.sim.ca.cols))
+        max_grid_h = self.height - 40
+        self.cell_size = max(7, min(20,
+                                    max_grid_w // self.sim.ca.cols,
+                                    max_grid_h // self.sim.ca.rows))
         self.grid_origin = (20, 20)
 
         self.buttons = []
@@ -204,7 +178,6 @@ class UserInterface:
         self._step_accumulator = 0.0
 
         self._build_controls()
-        self.show_charts = True
         self.running = True
 
     def _build_controls(self):
@@ -222,8 +195,7 @@ class UserInterface:
         self.btn_gen = add("Generate Vehicle", self._spawn_one)
         self.btn_clear = add("Clear Vehicles", self._clear_vehicles)
         self.btn_clear_route = add("Clear Route", self._clear_route)
-        self.btn_charts = add("Toggle Charts", self._toggle_charts)
-        by += (bh + gap) * 7 + 14
+        by += (bh + gap) * 6 + 14
         param_y = by + 4
 
         # Sliders / configurable parameters.
@@ -279,9 +251,6 @@ class UserInterface:
         if not (ox <= x < ox + ca.cols * cs and oy <= y < oy + ca.rows * cs):
             return None
         return (y - oy) // cs, (x - ox) // cs
-
-    def _toggle_charts(self):
-        self.show_charts = not self.show_charts
 
     # ---------------------------------------------------------------- drawing
     def _is_intersection(self, ca, r, c):
@@ -346,53 +315,19 @@ class UserInterface:
         pygame.draw.rect(self.screen, PANEL_BORDER, (ox, oy, gw, gh), width=2)
 
     def draw_panel(self):
-        """Draw two columns to the right of the city.
+        """Draw two compact columns to the right of the city.
 
-        Controls and parameters live in a middle column; the real-time
-        statistics and their charts get a dedicated right-hand column, placed
-        at the top so every metric stays visible on screen.
+        Controls/parameters sit in a middle column and the real-time statistics
+        in a right column. Both panels are sized to their content instead of
+        filling the window, leaving the city as large as possible.
         """
         rx = self.grid_origin[0] + self.sim.ca.cols * self.cell_size + 20
-        rw = self.width - rx - 20
         top, bottom = 20, self.height - 20
         gap = 14
-        ctrl_w = max(220, min(310, int(rw * 0.34)))
+        ctrl_w = max(220, min(300, int((self.width - rx - 20) * 0.42)))
         stats_x = rx + ctrl_w + gap
         stats_w = self.width - stats_x - 20
 
-        # ---- Middle column: controls + parameters ----
-        ctrl_rect = pygame.Rect(rx, top, ctrl_w, bottom - top)
-        pygame.draw.rect(self.screen, PANEL, ctrl_rect, border_radius=8)
-        pygame.draw.rect(self.screen, PANEL_BORDER, ctrl_rect, width=2, border_radius=8)
-
-        ty = top + 6
-        draw_text(self.screen, "Controls", rx + 12, ty, self.title_font)
-        ty += 26
-        for b in self.buttons:
-            b.rect.x = rx + 12
-            b.rect.y = ty
-            b.rect.width = ctrl_w - 24
-            b.draw(self.screen)
-            ty += b.rect.height + 8
-
-        ty += 10
-        draw_text(self.screen, "Parameters", rx + 12, ty, self.title_font)
-        ty += 26
-        for s in self.sliders:
-            s.rect.x = rx + 12
-            s.rect.y = ty
-            s.rect.width = ctrl_w - 24
-            s.draw(self.screen)
-            ty += s.rect.height + 36
-
-        # ---- Right column: statistics (+ charts underneath) ----
-        stats_rect = pygame.Rect(stats_x, top, stats_w, bottom - top)
-        pygame.draw.rect(self.screen, PANEL, stats_rect, border_radius=8)
-        pygame.draw.rect(self.screen, PANEL_BORDER, stats_rect, width=2, border_radius=8)
-
-        ty = top + 6
-        draw_text(self.screen, "Real-time statistics", stats_x + 12, ty, self.title_font)
-        ty += 24
         stats = self.sim.current_stats()
         lines = [
             ("Generation", f"{stats['generation']}"),
@@ -408,58 +343,57 @@ class UserInterface:
             ("Pending / unreach.", f"{stats['stops_pending']} / {stats['stops_unreachable']}"),
             ("Route / time", f"{stats['route_length']} / {stats['courier_time']} gen"),
         ]
+
+        # ---- Measure content so the panels fit exactly ----
+        ty = top + 6 + 26
+        for b in self.buttons:
+            b.rect.x = rx + 12
+            b.rect.y = ty
+            b.rect.width = ctrl_w - 24
+            ty += b.rect.height + 8
+        ty += 10 + 26
+        for s in self.sliders:
+            s.rect.x = rx + 12
+            s.rect.y = ty
+            s.rect.width = ctrl_w - 24
+            ty += s.rect.height + 36
+        ctrl_h = min(ty - top + 6, bottom - top)
+
+        stats_bottom = top + 6 + 24 + len(lines) * 19 + 10
+        stats_h = min(stats_bottom - top, bottom - top)
+
+        # ---- Panel backgrounds ----
+        pygame.draw.rect(self.screen, PANEL, (rx, top, ctrl_w, ctrl_h), border_radius=8)
+        pygame.draw.rect(self.screen, PANEL_BORDER, (rx, top, ctrl_w, ctrl_h),
+                         width=2, border_radius=8)
+        pygame.draw.rect(self.screen, PANEL, (stats_x, top, stats_w, stats_h),
+                         border_radius=8)
+        pygame.draw.rect(self.screen, PANEL_BORDER, (stats_x, top, stats_w, stats_h),
+                         width=2, border_radius=8)
+
+        # ---- Controls + parameters ----
+        ty = top + 6
+        draw_text(self.screen, "Controls", rx + 12, ty, self.title_font)
+        ty += 26
+        for b in self.buttons:
+            b.draw(self.screen)
+            ty += b.rect.height + 8
+
+        ty += 10
+        draw_text(self.screen, "Parameters", rx + 12, ty, self.title_font)
+        ty += 26
+        for s in self.sliders:
+            s.draw(self.screen)
+            ty += s.rect.height + 36
+
+        # ---- Statistics ----
+        ty = top + 6
+        draw_text(self.screen, "Real-time statistics", stats_x + 12, ty, self.title_font)
+        ty += 24
         for label, value in lines:
             draw_text(self.screen, f"{label}:", stats_x + 12, ty, self.small_font, TEXT_MUTED)
             draw_text(self.screen, value, stats_x + 12 + 150, ty, self.small_font, TEXT)
             ty += 19
-
-        chart_top = ty + 14
-        chart_bottom = bottom - 10
-        return stats_x + 12, stats_w - 24, chart_top, chart_bottom
-
-    def draw_charts(self, cx, cw, chart_top, chart_bottom):
-        hist = self.sim.history()
-        active = hist["active"]
-        exited = hist["exited"]
-        congested = hist["congested"]
-        density = hist["density"]
-        total_gen = hist["generations"] and self.sim.current_stats()["total_generated"] or 0
-        total_ex = self.sim.current_stats()["total_exited"]
-
-        ch = (chart_bottom - chart_top - 14) / 2
-        cw2 = (cw - 24) / 2
-
-        # 1. Active vs Exited (current).
-        rect1 = pygame.Rect(cx, chart_top, cw2, ch)
-        cur_active = active[-1] if active else 0
-        cur_exited = exited[-1] if exited else 0
-        draw_bar_chart(self.screen, rect1, [cur_active, cur_exited],
-                       ["Active", "Exited"],
-                       "1) Active vs Exited vehicles", (60, 110, 255),
-                       self.small_font, self.small_font)
-
-        # 2. Congestion over recent intervals.
-        rect2 = pygame.Rect(cx + cw2 + 12, chart_top, cw2, ch)
-        recent = congested[-10:] if congested else [0]
-        labels2 = [f"t-{len(recent)-i}" for i in range(len(recent))]
-        draw_bar_chart(self.screen, rect2, recent, labels2,
-                       "2) Congested cells (recent)", (225, 60, 60),
-                       self.small_font, self.small_font, show_values=True)
-
-        # 3. Generation vs Departure.
-        rect3 = pygame.Rect(cx, chart_top + ch + 14, cw2, ch)
-        draw_bar_chart(self.screen, rect3, [total_gen, total_ex],
-                       ["Generated", "Departed"],
-                       "3) Generated vs Departed", (60, 180, 90),
-                       self.small_font, self.small_font)
-
-        # 4. Traffic density under current light configuration (recent).
-        rect4 = pygame.Rect(cx + cw2 + 12, chart_top + ch + 14, cw2, ch)
-        recent_d = density[-10:] if density else [0]
-        labels4 = [f"t-{len(recent_d)-i}" for i in range(len(recent_d))]
-        draw_bar_chart(self.screen, rect4, recent_d, labels4,
-                       "4) Density % (current light config)", (220, 150, 40),
-                       self.small_font, self.small_font, show_values=True)
 
     def _apply_ui_params(self):
         self.sim.gen_rate = self.sliders[0].value
@@ -500,7 +434,7 @@ class UserInterface:
 
             self.screen.fill(BG)
             self.draw_grid()
-            cx, cw, chart_top, chart_bottom = self.draw_panel()
+            self.draw_panel()
 
             if self.sim.running and not self.sim.paused:
                 self._step_accumulator += self.sim.speed
@@ -510,9 +444,6 @@ class UserInterface:
                     self._step_accumulator -= 1.0
             else:
                 self._step_accumulator = 0.0
-
-            if self.show_charts:
-                self.draw_charts(cx, cw, chart_top, chart_bottom)
 
             pygame.display.flip()
             self.clock.tick(FPS)
